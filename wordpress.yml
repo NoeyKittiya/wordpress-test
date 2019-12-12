@@ -1,0 +1,107 @@
+---
+- name: Install Wordpress
+  hosts: web
+  remote_user: root
+
+  tasks:
+    - name: install a list of packages
+      yum: 
+       name: "{{ item }}"
+       state: present
+      loop: 
+        - httpd
+        - mariadb
+        - mariadb-server
+        - php
+        - php-common
+        - php-mysql
+        - php-gd 
+        - php-xml
+        - php-mbstring 
+        - php-mcrypt
+        - php-xmlrpc
+        - unzip
+        - wget
+        - MySQL-python
+
+    - name: start service httpd
+      service:
+       name: "{{ item }}"
+       state: started
+       enabled: yes  
+      loop:
+        - httpd
+        - mariadb
+   
+    - name: open firewalld
+      firewalld:
+       service: http
+       permanent: yes
+       state: enabled
+       immediate: yes
+  
+    - name: set password admin
+      block:
+       - command: mysqladmin password "abc"
+      rescue:
+       - debug:
+          msg: "already run"
+    
+    - name: copy file
+      copy:
+       src: /home/centos/quiz/script.sql
+       dest: /tmp/script.sql
+       remote_src: no
+
+    - name: dump all database
+      block:
+       - mysql_db:
+          login_user: root
+          login_password: abc
+          state: import
+          name: all
+          target: /tmp/script.sql 
+      rescue:
+       - debug:
+          msg: "already dump all database"
+
+    - name: download file
+      get_url:
+       url: https://wordpress.org/wordpress-5.0.tar.gz
+       dest: /tmp/wordpress.tar.gz
+   
+    - name: extract file
+      unarchive:
+       src: /tmp/wordpress.tar.gz
+       dest: /var/www/html/
+       remote_src: yes  
+
+    - name: change file ownership, group
+      file:
+       path: /var/www/html/wordpress
+       owner: apache
+       group: apache
+       mode: '0755'
+
+    - name: create a directory
+      file:
+       path: /var/www/html/wordpress/wp-content/uploads
+       state: directory
+       group: apache
+
+    - name: copy file
+      copy:
+       src: /var/www/html/wordpress/wp-config-sample.php
+       dest: /var/www/html/wordpress/wp-config.php 
+       remote_src: yes
+
+    - name: replace word
+      replace:
+       path: /var/www/html/wordpress/wp-config.php
+       regexp: "{{ item.word }}"
+       replace: "{{ item.replace }}"
+      loop:
+       - { word: database_name_here, replace: wordpress } 
+       - { word: username_here, replace: ansible }
+       - { word: password_here, replace: mypassword }
+       - { word: localhost, replace: localhost }
